@@ -1,3 +1,7 @@
+INIT_SSTHRESH = 64 * 1024
+MTU = 1460
+DUP_ACK_THRESHOLD = 3
+
 class CwndControl:
     '''Interface for the congestion control actions'''
 
@@ -23,7 +27,6 @@ class CwndControl:
                 self.dup_acks = 0
 
     def on_timeout(self):
-        #
         self.ssthresh = max(int(self.cwnd / 2), 2 * MTU)
         self.cwnd = 1.0 * MTU
 
