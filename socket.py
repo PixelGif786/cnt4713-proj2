@@ -3,7 +3,7 @@ from enum import Enum
 import socket
 import sys
 import time
-
+import random
 from .common import *
 from .packet import Packet
 from .cwnd_control import CwndControl
@@ -191,7 +191,7 @@ class Socket:
     def sendSynPacket(self):
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isSyn=True)
         ### UPDATE CORRECTLY HERE
-        self.seqNum += 1
+        self.seqNum = random.randint(0, 2**16)
         self._send(synPkt)
 
     def expectSynAck(self):
@@ -203,17 +203,16 @@ class Socket:
                 self.base = self.seqNum
                 self.state = State.OPEN
                 #the fix is
-                self.seqNum += 1
+                self.seqNum = pkt.ackNum + 1
                 break
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR
                 raise RuntimeError("timeout")
 
     def sendFinPacket(self):
-        synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isFin=True)
-        ### UPDATE CORRECTLY HERE
-        self.seqNum = self.seqNum + 1
-        self._send(synPkt)
+        finPkt = Packet(seqNum=self.seqNum, connId=self.connId, isFin=True)
+        self._send(finPkt)
+        self.seqNum += 1
 
     def expectFinAck(self):
         ### MAY NEED FIXES IN THIS METHOD
@@ -265,7 +264,7 @@ class Socket:
             toSend = self.outBuffer[:MTU]
             pkt = Packet(seqNum=self.base, connId=self.connId, payload=toSend)
             ### UPDATE CORRECTLY HERE
-            self.seqNum += len(toSend)
+            self.seqNum = self.base + len(toSend)
             self._send(pkt)
 
             pkt = self._recv()  # if within RTO we didn't receive packets, things will be retransmitted
@@ -276,10 +275,13 @@ class Socket:
                     self.nDupAcks += 1
                 else:
                     self.nDupAcks = 0
+                    self.base = pkt.ackNum
+                    self.cwnd_control.on_ack_received(advanceAmount)
 
                 self.outBuffer = self.outBuffer[advanceAmount:]
                 ### UPDATE CORRECTLY HERE
-                self.base = pkt.ackNum
+                self.seqNum += advanceAmount
+                self.base = self.seqNum
 
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR
